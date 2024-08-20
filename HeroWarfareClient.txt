@@ -1,0 +1,84 @@
+local uis = game:GetService("UserInputService")
+local onweb = false
+local onzip = false
+local lastWebActionTime = 0
+local lastZipActionTime = 0
+local cooldownDuration = 1 -- Reduced cooldown duration to 1 second
+local plr = game:GetService("Players").LocalPlayer
+local mouse = plr:GetMouse()
+local Camera = workspace.CurrentCamera
+local char = plr.Character or plr.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+local animator = hum:WaitForChild("Animator")
+local tween = game:GetService("TweenService"):Create(Camera, TweenInfo.new(.4), {FieldOfView = 100})
+local tween2 = game:GetService("TweenService"):Create(Camera, TweenInfo.new(.6), {FieldOfView = 70})
+local maxslingdistance = 150 / 4 -- Divide the web interaction distance by 4
+local maxzipdistance = 300
+local webzipkeycode = Enum.KeyCode.E
+local webshootkeycode = Enum.KeyCode.Q -- Changed to Q for web interaction
+mouse.TargetFilter = workspace.Webs
+
+-- Function to lift the player upwards
+local function liftUpwards()
+	local hrp = char:WaitForChild("HumanoidRootPart")
+	local head = char:WaitForChild("Head")
+	local height = (head.Position - hrp.Position).Magnitude
+	hrp.CFrame = hrp.CFrame * CFrame.new(0, height + 10, 0)
+end
+
+-- Function to check if the cooldown is active
+local function isCooldownActive(lastActionTime)
+	return tick() - lastActionTime < cooldownDuration
+end
+
+-- Handle input beginning
+uis.InputBegan:Connect(function(i, g)
+	if not g then
+		local mpos = mouse.Hit.Position
+		local target = mouse.Target
+
+		-- Check for web swing
+		if i.UserInputType == Enum.UserInputType.Keyboard and i.KeyCode == webshootkeycode then
+			if target and string.find(target.Name:lower(), "wall") and (mpos - char.HumanoidRootPart.Position).Magnitude <= maxslingdistance then
+				if not onweb and not isCooldownActive(lastWebActionTime) then
+					onweb = true
+					tween:Play()
+					liftUpwards()
+
+					if mouse.X > mouse.ViewSizeX / 2 then
+						game:GetService("ReplicatedStorage").Web:FireServer(true, target, mpos, "Right")
+					else
+						game:GetService("ReplicatedStorage").Web:FireServer(true, target, mpos, "Left")
+					end
+					hum.PlatformStand = true
+					lastWebActionTime = tick() -- Update the last action time
+				end
+			end
+			-- Check for web zip
+		elseif i.UserInputType == Enum.UserInputType.Keyboard and i.KeyCode == webzipkeycode then
+			local mpos = mouse.Hit.Position
+			if (mpos - char.HumanoidRootPart.Position).Magnitude <= maxzipdistance and not onzip and not isCooldownActive(lastZipActionTime) then
+				onzip = true
+				tween:Play()
+				game:GetService("ReplicatedStorage").WebZip:FireServer(mouse.Target, mpos)
+				lastZipActionTime = tick() -- Update the last action time
+			end
+		end
+	end
+end)
+
+-- Handle input ending
+uis.InputEnded:Connect(function(i, g)
+	if not g and i.UserInputType == Enum.UserInputType.Keyboard and i.KeyCode == webshootkeycode and onweb then
+		onweb = false
+		tween2:Play()
+		game:GetService("ReplicatedStorage").Web:FireServer(false)
+		hum.PlatformStand = false
+	end
+end)
+
+-- Handle WebZip event from server
+game:GetService("ReplicatedStorage").WebZip.OnClientEvent:Connect(function()
+	onzip = false
+	tween2:Play()
+end)

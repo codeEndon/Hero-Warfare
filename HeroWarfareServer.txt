@@ -1,0 +1,207 @@
+local statuses = {}
+local webslingspeed = 2000
+local tweens = game:GetService("TweenService")
+local webzipspeed = 2500
+local webreachspeed = .45
+local radius = 3.5
+local WebShootTime = 20
+local WebShootSpeed = .2
+local websize = 4
+
+game:GetService("ReplicatedStorage").Web.OnServerEvent:Connect(function(plr, status, target, point, hand)
+	if status == true then
+		local char = plr.Character
+		if char then
+
+			local arm = char[hand.."Hand"] or char[hand..'Arm']
+			local armattachment = Instance.new("Attachment")
+			armattachment.Parent = char.HumanoidRootPart
+			armattachment.WorldPosition = char.HumanoidRootPart.Position
+
+			local pointattachment = Instance.new("Attachment")
+			pointattachment.Parent = target
+			pointattachment.WorldPosition = point
+
+			local bodyGyro = Instance.new("BodyGyro")
+			bodyGyro.Parent = char.HumanoidRootPart
+			bodyGyro.P = 1000
+			bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+			bodyGyro.D = 15
+
+			local rope = Instance.new("RopeConstraint")
+			local length = (arm.Position - point).Magnitude
+
+			rope.Visible = false
+			rope.Attachment0 = armattachment
+			rope.Attachment1 = pointattachment
+			rope.Parent = arm
+			rope.Length = length
+			rope.Color = BrickColor.new("White")
+			rope.Restitution = .5
+
+			task.wait()
+
+			local fakeattach = Instance.new("Attachment")
+			fakeattach.Parent = target
+			fakeattach.WorldPosition = char[hand.."Hand"].Position
+
+			local fakeattach2 = Instance.new("Attachment")
+			fakeattach2.Parent = char[hand.."Hand"]
+			fakeattach2.WorldPosition = char[hand.."Hand"].Position
+
+			local beam = Instance.new("Beam")
+			beam.Texture = "rbxassetid://8599205743"
+			beam.TextureMode = Enum.TextureMode.Stretch
+			beam.TextureSpeed = 0
+			beam.TextureLength = 1
+			beam.Transparency = NumberSequence.new(0)
+			beam.LightEmission = 1
+			beam.LightInfluence = 0
+			beam.FaceCamera = true
+			beam.Attachment0 = fakeattach2
+			beam.Attachment1 = fakeattach
+			beam.Width0 = 3
+			beam.Width1 = 3
+			beam.Parent = arm
+
+			local bodyForce = Instance.new("BodyForce")
+			bodyForce.Parent = char.HumanoidRootPart
+
+			local animator = char.Humanoid:WaitForChild("Animator")
+			local spider = animator:LoadAnimation(script:WaitForChild("Spider"))
+
+			spawn(function()
+				statuses[plr] = {armattachment, pointattachment, fakeattach, rope, bodyForce, bodyGyro, beam}
+				local tween = tweens:Create(fakeattach, TweenInfo.new(webreachspeed), {WorldPosition = point})
+				tween:Play()
+				tween.Completed:Connect(function()
+					beam.Attachment1 = pointattachment
+				end)
+
+				while true do
+					if char.Humanoid then
+						if statuses[plr] ~= nil then
+							spider:Play()
+							bodyGyro.CFrame = CFrame.new(char.HumanoidRootPart.Position, char.HumanoidRootPart.Position + char.Humanoid.MoveDirection * 10)
+							bodyForce.Force = Vector3.new(char.Humanoid.MoveDirection.X * webslingspeed, -webslingspeed / 4, webslingspeed /15)
+
+							-- Update the attachments' positions to stretch the beam and rope to the target
+							fakeattach.WorldPosition = target.Position
+							fakeattach2.WorldPosition = arm.Position
+							rope.Length = (arm.Position - point).Magnitude
+						else
+							spider:Stop()
+							tween:Cancel()
+							break
+						end
+					else
+						spider:Stop()
+						tween:Cancel()
+						break
+					end
+					task.wait()
+				end
+			end)
+		end
+	elseif status == false then
+		if statuses[plr] ~= nil then
+			for _, v in pairs(statuses[plr]) do
+				v:Destroy()
+			end
+			statuses[plr] = nil
+		end
+	end
+end)
+
+local normals = {
+	[Enum.NormalId.Front] = Vector3.new(0,0,-1),
+	[Enum.NormalId.Back] = Vector3.new(0,0,1),
+	[Enum.NormalId.Left] = Vector3.new(-1,0,0),
+	[Enum.NormalId.Right] = Vector3.new(0,1,0),
+	[Enum.NormalId.Bottom] = Vector3.new(0,-1,0),
+	
+}
+
+game:GetService("ReplicatedStorage").WebZip.OnServerEvent:Connect(function(plr, target, mousepos, normal)
+	local char = plr.Character
+	if char then
+		if normal == Enum.NormalId.Top or normal == Enum.NormalId.Bottom then
+			radius = 6
+		end
+		
+		local hum = char:WaitForChild("Humanoid")
+		local animator = hum:WaitForChild("Animator")
+		local zipping = animator:LoadAnimation(script:WaitForChild("Zipping"))
+		zipping:AdjustSpeed(.01)
+		
+		local bodyGyro = Instance.new("BodyGyro")
+		bodyGyro.Parent = char.HumanoidRootPart
+		bodyGyro.CFrame = CFrame.new(char.HumanoidRootPart.Position, mousepos)
+		bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+		bodyGyro.P = 3000
+		bodyGyro.D = 0
+		
+		local arm = char.LeftHand or char['Left Arm']
+		
+		local armattachment = Instance.new("Attachment")
+		armattachment.Parent = arm
+		armattachment.WorldPosition = arm.Position
+		
+		local pointattachment = Instance.new("Attachment")
+		pointattachment.Parent = target
+		pointattachment.WorldPosition = mousepos
+		
+		local length = (arm.Position - mousepos).Magnitude
+		
+		zipping:Play()
+		
+		local bodyPosition = Instance.new("BodyPosition")
+		bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+		bodyPosition.Position = mousepos
+		bodyPosition.P = 300
+		bodyPosition.D = 30
+		bodyPosition.Parent = char.HumanoidRootPart
+		
+		local beam = Instance.new("Beam")
+		beam.Texture = "rbxassetid://8599205743"
+		beam.TextureMode = Enum.TextureMode.Stretch
+		beam.TextureSpeed = 0
+		beam.TextureLength = 1
+		beam.Transparency = NumberSequence.new(0)
+		beam.LightEmission = 1
+		beam.LightInfluence = 0
+		beam.FaceCamera = true
+		beam.Attachment0 = armattachment
+		beam.Attachment1 = pointattachment
+		beam.Width0 = 3
+		beam.Width1 = 3
+		beam.Parent = arm
+		
+		spawn(function()
+			while task.wait() do
+				if (bodyPosition.Position - Vector3.new(math.floor(char.HumanoidRootPart.Position.X), math.floor(char.HumanoidRootPart.Position.Y), math.floor(char.HumanoidRootPart.Position.Z))).Magnitude <= radius then
+					bodyPosition:Destroy()
+					armattachment:Destroy()
+					pointattachment:Destroy()
+					armattachment:Destroy()
+					beam:Destroy()
+					
+					local bodyForce = Instance.new("BodyForce")
+					bodyForce.Parent = char.HumanoidRootPart
+					bodyForce.Force = Vector3.new(0, webzipspeed * 3, 0)
+					
+					task.wait(.2)
+					
+					zipping:Stop()
+					bodyForce:Destroy()
+					bodyGyro:Destroy()
+					
+					game:GetService("ReplicatedStorage").WebZip:FireClient(plr)
+					char.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+					break
+				end 
+			end
+		end)
+		
+	end
+end)
