@@ -3,24 +3,27 @@ local onweb = false
 local onzip = false
 local lastWebActionTime = 0
 local lastZipActionTime = 0
-local cooldownDuration = 1 -- Reduced cooldown duration to 1 second
+local cooldownDuration = 0.2
 local plr = game:GetService("Players").LocalPlayer
 local mouse = plr:GetMouse()
 local Camera = workspace.CurrentCamera
 local char = plr.Character or plr.CharacterAdded:Wait()
 local hum = char:WaitForChild("Humanoid")
+local hrp = char:WaitForChild("HumanoidRootPart")
 local animator = hum:WaitForChild("Animator")
 local tween = game:GetService("TweenService"):Create(Camera, TweenInfo.new(.4), {FieldOfView = 100})
 local tween2 = game:GetService("TweenService"):Create(Camera, TweenInfo.new(.6), {FieldOfView = 70})
-local maxslingdistance = 150 / 4 -- Divide the web interaction distance by 4
-local maxzipdistance = 300
+local maxslingdistance = 150 / 4
+local maxzipdistance = 300/5
 local webzipkeycode = Enum.KeyCode.E
-local webshootkeycode = Enum.KeyCode.Q -- Changed to Q for web interaction
+local webshootkeycode = Enum.KeyCode.Q
+local ragdollThreshold = 5 -- Distance to ground at which ragdoll is disabled
 mouse.TargetFilter = workspace.Webs
+
+local currentMousePosition = mouse.Hit.Position
 
 -- Function to lift the player upwards
 local function liftUpwards()
-	local hrp = char:WaitForChild("HumanoidRootPart")
 	local head = char:WaitForChild("Head")
 	local height = (head.Position - hrp.Position).Magnitude
 	hrp.CFrame = hrp.CFrame * CFrame.new(0, height + 10, 0)
@@ -31,19 +34,67 @@ local function isCooldownActive(lastActionTime)
 	return tick() - lastActionTime < cooldownDuration
 end
 
+-- Function to apply a stronger initial pull and conserve momentum
+local function applyInitialPull(targetPosition)
+	local direction = (targetPosition - hrp.Position).Unit
+	local velocity = hrp.Velocity
+	local momentum = velocity.Magnitude
+	local upwardForce = Vector3.new(0, 50, 0) -- Adjust for desired upward force
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.Velocity = (direction * momentum) + upwardForce -- Combine momentum with upward force
+	bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+	bodyVelocity.P = 5000
+	bodyVelocity.Parent = hrp
+
+	-- Automatically remove the BodyVelocity after 0.2 seconds to avoid continuous force
+	game:GetService("Debris"):AddItem(bodyVelocity, 0.2)
+end
+
+-- Function to accelerate upwards during swing
+local function accelerateSwing()
+	local direction = (currentMousePosition - hrp.Position).Unit
+	local acceleration = Instance.new("BodyVelocity")
+	acceleration.Velocity = direction * 20 -- Adjust acceleration value
+	acceleration.MaxForce = Vector3.new(1000, 1000, 1000)
+	acceleration.Parent = hrp
+
+	-- Remove the acceleration after 0.2 seconds
+	game:GetService("Debris"):AddItem(acceleration, 0.2)
+end
+
+-- Function to detect ground proximity and disable ragdoll
+local function disableRagdollIfNearGround()
+	local ray = Ray.new(hrp.Position, Vector3.new(0, -1, 0) * 10)
+	local hit, position = workspace:FindPartOnRay(ray, char)
+	if hit and (hrp.Position - position).Magnitude < ragdollThreshold then
+		hum.PlatformStand = false
+	end
+end
+
+-- Update the current mouse position live
+mouse.Move:Connect(function()
+	currentMousePosition = mouse.Hit.Position
+end)
+
 -- Handle input beginning
 uis.InputBegan:Connect(function(i, g)
 	if not g then
-		local mpos = mouse.Hit.Position
+		local mpos = currentMousePosition
 		local target = mouse.Target
 
 		-- Check for web swing
 		if i.UserInputType == Enum.UserInputType.Keyboard and i.KeyCode == webshootkeycode then
-			if target and string.find(target.Name:lower(), "wall") and (mpos - char.HumanoidRootPart.Position).Magnitude <= maxslingdistance then
+			if target and string.find(target.Name:lower(), "wall") and (mpos - hrp.Position).Magnitude <= maxslingdistance then
 				if not onweb and not isCooldownActive(lastWebActionTime) then
 					onweb = true
 					tween:Play()
 					liftUpwards()
+
+					-- Apply the initial pull and conserve momentum
+					applyInitialPull(mpos)
+
+					-- Continuously accelerate while swinging
+					accelerateSwing()
 
 					if mouse.X > mouse.ViewSizeX / 2 then
 						game:GetService("ReplicatedStorage").Web:FireServer(true, target, mpos, "Right")
@@ -56,8 +107,7 @@ uis.InputBegan:Connect(function(i, g)
 			end
 			-- Check for web zip
 		elseif i.UserInputType == Enum.UserInputType.Keyboard and i.KeyCode == webzipkeycode then
-			local mpos = mouse.Hit.Position
-			if (mpos - char.HumanoidRootPart.Position).Magnitude <= maxzipdistance and not onzip and not isCooldownActive(lastZipActionTime) then
+			if (mpos - hrp.Position).Magnitude <= maxzipdistance and not onzip and not isCooldownActive(lastZipActionTime) then
 				onzip = true
 				tween:Play()
 				game:GetService("ReplicatedStorage").WebZip:FireServer(mouse.Target, mpos)
@@ -74,6 +124,9 @@ uis.InputEnded:Connect(function(i, g)
 		tween2:Play()
 		game:GetService("ReplicatedStorage").Web:FireServer(false)
 		hum.PlatformStand = false
+
+		-- Disable ragdoll if near the ground
+		disableRagdollIfNearGround()
 	end
 end)
 
